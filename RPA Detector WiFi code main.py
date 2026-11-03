@@ -76,7 +76,7 @@ def wifi_thread():
                         'Running ' + elapsed_str + ' elapsed</p>'
                     )
                     refresh = '<meta http-equiv="refresh" content="1">'
-                elif :
+                elif done_msg:
                     status_html = (
                         '<p style="color:blue;font-weight:bold;">'
                         'Complete ' + done_msg + '</p>'
@@ -132,6 +132,7 @@ def wifi_thread():
                         file_busy[0] = False
             else:
                 cl.send("HTTP/1.1 404 Not Found\r\n\r\nNot found")
+
         except OSError:
             pass
         except Exception as e:
@@ -149,12 +150,15 @@ def wifi_thread():
 def key_pressed(): return select.select([sys.stdin], [], [], 0)[0]
 def fmt_time(s): return f"{s//60}:{s%60:02d}"
 def _b(z, f, ms): z.freq(f); z.duty_u16(32768); utime.sleep_ms(ms); z.duty_u16(0)
+
 def beep_melody(z):
     for f in (1200, 1500, 1800, 2000): _b(z, f, 80); utime.sleep_ms(40)
+
 def lid_beep(z):
     _b(z, 1000, 100); utime.sleep_ms(50)
     _b(z, 1400, 100); utime.sleep_ms(50)
     _b(z, 1000, 100)
+
 def debounce(pin, prev, last_ms, now):
     val = pin.value()
     if val != prev and utime.ticks_diff(now, last_ms) >= 300:
@@ -163,6 +167,7 @@ def debounce(pin, prev, last_ms, now):
 
 # ── FILENAME GENERATION ────────────────────────────────────────
 _RTC_EPOCH_YEAR = 2024
+
 def _next_sequential_filename():
     import uos
     existing = set()
@@ -209,16 +214,18 @@ def main():
     utime.sleep_ms(100)
     if 0x48 not in i2c.scan(): print("Error: ADC not found"); return
     adc = ADS1115(i2c, address=0x48, gain=2)
+
     spi = SPI(1, baudrate=5_000_000, polarity=0, phase=0,
               sck=Pin(10), mosi=Pin(11), miso=Pin(8))
     tc = MAX31855(spi, cs_pin=9)
+
     heater = Pin(15, Pin.OUT); heater.off()
     led = Pin(14, Pin.OUT); led.off()
     rtc = RTC()
 
     # ── LED EXCITATION TIMING ──────────────────────────────────
     led_on_ms        = int(sampling_period_s * 0.20 * 1000)
-    warmup_led_on_ms = int(warmup_period_s   * 0.20 * 1000)
+    warmup_led_on_ms = int(warmup_period_s * 0.20 * 1000)
 
     # ── LID SETUP ──────────────────────────────────────────────
     lid_btn = Pin(0, Pin.IN, Pin.PULL_UP)
@@ -285,7 +292,6 @@ def main():
 
         if not running and lid_open and utime.ticks_diff(now, lid_opened_at) >= 10000:
             lid_beeping = True
-
         if lid_beeping and utime.ticks_diff(now, last_lid_beep) >= 2000:
             last_lid_beep = now
             lid_beep(buz)
@@ -297,6 +303,7 @@ def main():
         active_period_ms = sampling_period_s * 1000 if running else warmup_period_s * 1000
         active_led_on_ms = led_on_ms if running else warmup_led_on_ms
         elapsed_cycle = utime.ticks_diff(now, cycle_start)
+
         if elapsed_cycle >= active_period_ms:
             cycle_start = now; elapsed_cycle = 0
             burst_logged = False; burst_sums = [0]*4; burst_count = 0
@@ -324,7 +331,6 @@ def main():
             if running:
                 cycle_num = exp_cycle_index
                 exp_cycle_index += 1
-
                 if first_burst_pending:
                     first_burst_pending = False
                 else:
@@ -348,8 +354,9 @@ def main():
 
                     print(f"[{label}] A0={mv[0]} A1={mv[1]} A2={mv[2]} A3={mv[3]}mV T={temp_str}°C duty={int(duty_percent)}% n={burst_count}")
 
-                if exp_cycle_index > (experiment_minutes*60)//sampling_period_s:
+                if exp_cycle_index > (experiment_minutes * 60) // sampling_period_s:
                     finishing = True
+
             else:
                 if not lid_open:
                     if lid_was_opened and last_closed_mv is not None and max_mv - last_closed_mv >= 100:
